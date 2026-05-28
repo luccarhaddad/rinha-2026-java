@@ -166,7 +166,7 @@
             </platforms>
           </from>
           <to>
-            <image>luccahaddad/rinha2026-java:latest</image>
+            <image>luccarhaddad/rinha2026-java:latest</image>
           </to>
           <container>
             <mainClass>com.rinha.fraud.App</mainClass>
