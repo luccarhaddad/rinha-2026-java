@@ -1,0 +1,25 @@
+# Build output
+target/
+*.class
+
+# Maven shade leftover
+dependency-reduced-pom.xml
+
+# Generated dataset artifacts (baked into the image at build time, not committed)
+api/src/main/resources/dataset.i8bin
+api/src/main/resources/labels.bin
+
+# IDE
+.idea/
+*.iml
+*.iws
+.vscode/
+
+# Local tool/agent state
+.claude/settings.local.json
+
+# OS
+.DS_Store
+
+# Claude
+.claude/
