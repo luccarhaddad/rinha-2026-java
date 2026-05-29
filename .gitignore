@@ -8,6 +8,7 @@ dependency-reduced-pom.xml
 # Generated dataset artifacts (baked into the image at build time, not committed)
 api/src/main/resources/dataset.i8bin
 api/src/main/resources/labels.bin
+api/src/main/resources/data.faiss
 
 # IDE
 .idea/

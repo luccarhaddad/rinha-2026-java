@@ -1,0 +1,53 @@
+# Build-once image: produces libfaiss_c.so + libfaiss.so for linux/amd64 (Haswell+).
+# Base matches eclipse-temurin:25-jre (Ubuntu 24.04 / glibc 2.39) so the resulting
+# .so files are ABI-compatible with the production runtime image.
+#
+# Usage: ./docker/build-faiss.sh
+# Output: vendor/linux-amd64/{libfaiss_c.so,libfaiss.so,FAISS-LICENSE}
+#
+# Pinned to FAISS v1.14.2 (2026-05-22). Update the FAISS_TAG arg and re-run
+# the extractor script to refresh.
+
+ARG FAISS_TAG=v1.14.2
+
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        cmake \
+        git \
+        ca-certificates \
+        libopenblas-dev \
+        libomp-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG FAISS_TAG
+WORKDIR /build
+RUN git clone --depth=1 --branch ${FAISS_TAG} https://github.com/facebookresearch/faiss.git
+
+WORKDIR /build/faiss
+# Target: Haswell+ AVX2/FMA3 (matches official Rinha test hardware).
+# FAISS_OPT_LEVEL=avx2 enables the curated avx2 code paths; we avoid avx512.
+RUN cmake -B build \
+        -DFAISS_ENABLE_GPU=OFF \
+        -DFAISS_ENABLE_PYTHON=OFF \
+        -DFAISS_ENABLE_C_API=ON \
+        -DBUILD_SHARED_LIBS=ON \
+        -DFAISS_OPT_LEVEL=avx2 \
+        -DBUILD_TESTING=OFF \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBLA_VENDOR=OpenBLAS \
+        .
+RUN cmake --build build -j"$(nproc)" --target faiss faiss_avx2 faiss_c
+
+# Strip to shrink size; keep symbols needed for FFM dynamic lookup.
+RUN strip --strip-unneeded build/faiss/libfaiss.so \
+                          build/faiss/libfaiss_avx2.so \
+                          build/c_api/libfaiss_c.so 2>/dev/null || true
+
+# Report what we built, for visibility when the script extracts.
+RUN echo "=== built .so files ===" \
+    && ls -la build/faiss/libfaiss.so build/faiss/libfaiss_avx2.so build/c_api/libfaiss_c.so \
+    && echo "=== ldd libfaiss_c.so ===" \
+    && ldd build/c_api/libfaiss_c.so
