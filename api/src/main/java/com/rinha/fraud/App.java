@@ -36,6 +36,15 @@ public final class App {
     private static WebServer server(int port, Handler scoreHandler) {
         return WebServer.builder()
                 .port(port)
+                // Bump well above default (1024) — at 900 rps peak with brief queueing,
+                // in-flight may transiently exceed default.
+                .maxConcurrentRequests(4096)
+                // TCP_NODELAY disables Nagle; default is on in Java NIO ServerSocket,
+                // but we set it explicitly for clarity. Bigger buffers reduce per-write syscalls.
+                .connectionOptions(opts -> opts
+                        .tcpNoDelay(true)
+                        .socketKeepAlive(true)
+                        .socketReuseAddress(true))
                 .routing(r -> r
                         .post("/fraud-score", scoreHandler)
                         .get("/ready", (req, res) -> res.send("OK")))

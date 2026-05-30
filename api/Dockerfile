@@ -45,16 +45,18 @@ ENV LD_LIBRARY_PATH=/usr/local/lib \
     FAISS_INDEX=/app/resources/data.faiss \
     LABELS_BIN=/app/resources/labels.bin \
     KERNEL=faiss \
-    FAISS_NPROBE=16 \
+    FAISS_NPROBE=8 \
+    OMP_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
     PORT=8080
 EXPOSE 8080
 ENTRYPOINT ["java", \
     "--add-modules=jdk.incubator.vector", \
     "--enable-native-access=ALL-UNNAMED", \
     "-XX:+UseG1GC", \
-    "-Xmx48m", \
-    "-XX:MaxMetaspaceSize=48m", \
-    "-XX:ReservedCodeCacheSize=48m", \
+    "-Xmx32m", \
+    "-XX:MaxMetaspaceSize=40m", \
+    "-XX:ReservedCodeCacheSize=32m", \
     "-XX:ActiveProcessorCount=1", \
     "-XX:+UseTransparentHugePages", \
     "-XX:-UsePerfData", \

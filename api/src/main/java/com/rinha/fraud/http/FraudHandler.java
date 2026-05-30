@@ -57,15 +57,21 @@ public final class FraudHandler implements Handler {
         }
     }
 
-    /** frauds in 0..5 -> {"approved":<bool>,"fraud_score":<0.0|0.2|0.4|0.6|0.8|1.0>}. */
+    /**
+     * frauds in 0..5 → one of 6 pre-built byte arrays. Zero allocation per request.
+     * Decision boundary: approved = fraud_score < 0.6 ⇔ frauds < 3.
+     */
+    private static final byte[][] RESPONSES = {
+        "{\"approved\":true,\"fraud_score\":0.0}".getBytes(java.nio.charset.StandardCharsets.US_ASCII),
+        "{\"approved\":true,\"fraud_score\":0.2}".getBytes(java.nio.charset.StandardCharsets.US_ASCII),
+        "{\"approved\":true,\"fraud_score\":0.4}".getBytes(java.nio.charset.StandardCharsets.US_ASCII),
+        "{\"approved\":false,\"fraud_score\":0.6}".getBytes(java.nio.charset.StandardCharsets.US_ASCII),
+        "{\"approved\":false,\"fraud_score\":0.8}".getBytes(java.nio.charset.StandardCharsets.US_ASCII),
+        "{\"approved\":false,\"fraud_score\":1.0}".getBytes(java.nio.charset.StandardCharsets.US_ASCII),
+    };
+
     static byte[] serialize(int frauds) {
-        boolean approved = frauds < 3; // score < 0.6  <=>  frauds < 3
-        String scoreStr = switch (frauds) {
-            case 0 -> "0.0"; case 1 -> "0.2"; case 2 -> "0.4";
-            case 3 -> "0.6"; case 4 -> "0.8"; default -> "1.0";
-        };
-        String json = "{\"approved\":" + approved + ",\"fraud_score\":" + scoreStr + "}";
-        return json.getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        return RESPONSES[frauds];
     }
 
     @Override
