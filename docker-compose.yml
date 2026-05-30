@@ -19,7 +19,7 @@ services:
           memory: "30MB"
 
   api-1: &api
-    image: luccarhaddad/rinha2026-java:faiss-v2
+    image: luccarhaddad/rinha2026-java:faiss-v3
     environment:
       PORT: "8080"
     networks: [app]
