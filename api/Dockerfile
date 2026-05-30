@@ -52,7 +52,10 @@ ENTRYPOINT ["java", \
     "--add-modules=jdk.incubator.vector", \
     "--enable-native-access=ALL-UNNAMED", \
     "-XX:+UseG1GC", \
-    "-Xmx64m", \
-    "-XX:MaxMetaspaceSize=64m", \
+    "-Xmx48m", \
+    "-XX:MaxMetaspaceSize=48m", \
+    "-XX:ReservedCodeCacheSize=48m", \
+    "-XX:ActiveProcessorCount=1", \
+    "-XX:+UseTransparentHugePages", \
     "-XX:-UsePerfData", \
     "-jar", "/app/api.jar"]
