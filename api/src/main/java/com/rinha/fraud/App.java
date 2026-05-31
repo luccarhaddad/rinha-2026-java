@@ -84,6 +84,14 @@ public final class App {
 
         warmupFaiss(faiss, labels, mcc);
 
+        // Training mode (AOT cache): exit cleanly after warmup so -XX:AOTCacheOutput
+        // can persist class loads + JIT profiles. Skips starting the server.
+        if ("1".equals(System.getenv("TRAINING"))) {
+            System.out.println("TRAINING=1: warmup done, exiting cleanly for AOT cache snapshot.");
+            faiss.close();
+            return;
+        }
+
         WebServer server = buildFaissServer(port, faiss, labels, mcc);
         server.start();
         System.out.println("Rinha fraud API (FAISS) listening on " + server.port() + " (n=" + labels.length + ")");

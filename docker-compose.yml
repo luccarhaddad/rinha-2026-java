@@ -1,6 +1,6 @@
 # Submission topology: nginx LB on :9999 round-robin across 2 API instances.
-# 2 × 0.45 CPU + 0.10 nginx = 1.0 CPU; 2 × 140 MB + 30 MB nginx = 310 MB
-# (FAISS mmap is 66 MB per instance — 3 instances doesn't fit the 350 MB budget).
+# 2 × 0.45 CPU + 0.10 nginx = 1.0 CPU; 2 × 160 MB + 30 MB nginx = 350 MB (full budget).
+# At 140 MB the kernel evicted file-cache of data.faiss under load → cascade OOM.
 services:
   nginx:
     image: nginx:1.27-alpine
@@ -19,7 +19,7 @@ services:
           memory: "30MB"
 
   api-1: &api
-    image: luccarhaddad/rinha2026-java:faiss-v3
+    image: luccarhaddad/rinha2026-java:faiss-v4
     environment:
       PORT: "8080"
     networks: [app]
@@ -27,7 +27,7 @@ services:
       resources:
         limits:
           cpus: "0.45"
-          memory: "140MB"
+          memory: "160MB"
 
   api-2:
     <<: *api
