@@ -69,13 +69,23 @@ echo "--- logs (head) ---"
 docker compose logs --tail=8 api-1
 
 echo "=== [6/6] run official k6 test ==="
-TEST_DIR="$WORK/rinha-de-backend-2026/test"
-cd "$TEST_DIR"
+# IMPORTANT: official test.js writes results to "test/results.json" relative to
+# k6's cwd — must run from repo root, NOT from inside test/.
+RINHA_DIR="$WORK/rinha-de-backend-2026"
+cd "$RINHA_DIR"
 echo "starting k6 (this takes ~2min: ramping arrival rate up to 900 rps over 120s)..."
-K6_NO_USAGE_REPORT=true k6 run test.js > "$WORK/k6.stdout.log" 2>&1 || true
+K6_NO_USAGE_REPORT=true k6 run test/test.js > "$WORK/k6.stdout.log" 2>&1 || true
 echo
-echo "=== RESULT (results.json) ==="
-cat "$TEST_DIR/results.json" | python3 -m json.tool
+RESULTS="$RINHA_DIR/test/results.json"
+echo "=== RESULT ($RESULTS) ==="
+if [[ -f "$RESULTS" ]]; then
+  python3 -m json.tool < "$RESULTS"
+else
+  echo "results.json not found at expected path; searching..."
+  find "$WORK" -name results.json 2>/dev/null
+  echo "--- k6 stdout tail ---"
+  tail -40 "$WORK/k6.stdout.log"
+fi
 echo
 echo "=== runtime memory (final snapshot) ==="
 docker stats --no-stream --format '{{.Name}} {{.MemUsage}} cpu={{.CPUPerc}}'
