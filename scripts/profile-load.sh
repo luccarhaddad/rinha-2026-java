@@ -136,9 +136,10 @@ if [ -f "$OUT_DIR/results.json" ]; then
   python3 -c "
 import json
 with open('$OUT_DIR/results.json') as f: d = json.load(f)
-s = d.get('test-results', {}).get('scoring', {})
+# results.json is flat (no 'test-results' wrapper — that's only added by the engine)
+s = d.get('scoring', {})
 br = s.get('breakdown', {})
-print(f'  p99:           {d[\"test-results\"].get(\"p99\")}')
+print(f'  p99:           {d.get(\"p99\")}')
 print(f'  TP/TN/FP/FN:   {br.get(\"true_positive_detections\")}/{br.get(\"true_negative_detections\")}/{br.get(\"false_positive_detections\")}/{br.get(\"false_negative_detections\")}')
 print(f'  HTTP errors:   {br.get(\"http_errors\")}')
 print(f'  failure_rate:  {s.get(\"failure_rate\")}')
