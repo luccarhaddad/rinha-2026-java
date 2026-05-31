@@ -48,8 +48,9 @@ ENV LD_LIBRARY_PATH=/usr/local/lib \
     FAISS_NPROBE=8 \
     OMP_NUM_THREADS=1 \
     OPENBLAS_NUM_THREADS=1 \
-    PORT=8080
-EXPOSE 8080
+    VERTX_EVENT_LOOPS=2
+# Note: SOCK_PATH is set by docker-compose per instance (api-1.sock, api-2.sock).
+# When SOCK_PATH is set, Vert.x listens on that Unix socket. Otherwise PORT (TCP).
 ENTRYPOINT ["java", \
     "--add-modules=jdk.incubator.vector", \
     "--enable-native-access=ALL-UNNAMED", \

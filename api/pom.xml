@@ -11,16 +11,16 @@
   <properties>
     <maven.compiler.release>25</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <helidon.version>4.1.6</helidon.version>
+    <vertx.version>4.5.10</vertx.version>
     <vector.module.args>--add-modules=jdk.incubator.vector</vector.module.args>
   </properties>
 
   <dependencyManagement>
     <dependencies>
       <dependency>
-        <groupId>io.helidon</groupId>
-        <artifactId>helidon-bom</artifactId>
-        <version>${helidon.version}</version>
+        <groupId>io.vertx</groupId>
+        <artifactId>vertx-stack-depchain</artifactId>
+        <version>${vertx.version}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -29,8 +29,19 @@
 
   <dependencies>
     <dependency>
-      <groupId>io.helidon.webserver</groupId>
-      <artifactId>helidon-webserver</artifactId>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-web</artifactId>
+    </dependency>
+    <!-- Netty native epoll transport: required by Vert.x for AF_UNIX sockets.
+         Linux x86_64 only — perfect for our amd64 production image. -->
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-transport-native-epoll</artifactId>
+      <classifier>linux-x86_64</classifier>
     </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>

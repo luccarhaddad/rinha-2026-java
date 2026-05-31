@@ -8,14 +8,14 @@ import com.rinha.fraud.vec.KnnSearch;
 import com.rinha.fraud.vec.Quantizer;
 import com.rinha.fraud.vec.TopK;
 import com.rinha.fraud.vec.Vectorizer;
-import io.helidon.webserver.http.Handler;
-import io.helidon.webserver.http.ServerRequest;
-import io.helidon.webserver.http.ServerResponse;
 
 import java.util.concurrent.ConcurrentLinkedQueue;
 
-/** POST /fraud-score handler. Pure scoring is in score(); HTTP glue in handle(). */
-public final class FraudHandler implements Handler {
+/**
+ * Brute-force scorer (kept for unit tests; production uses FaissFraudHandler).
+ * Pure POJO: no HTTP framework coupling.
+ */
+public final class FraudHandler {
     private final Dataset ds;
     private final MccRisk mcc;
     private final ConcurrentLinkedQueue<Scratch> pool = new ConcurrentLinkedQueue<>();
@@ -70,14 +70,7 @@ public final class FraudHandler implements Handler {
         "{\"approved\":false,\"fraud_score\":1.0}".getBytes(java.nio.charset.StandardCharsets.US_ASCII),
     };
 
-    static byte[] serialize(int frauds) {
+    public static byte[] serialize(int frauds) {
         return RESPONSES[frauds];
-    }
-
-    @Override
-    public void handle(ServerRequest request, ServerResponse response) {
-        byte[] body = request.content().as(byte[].class);
-        response.header(io.helidon.http.HeaderNames.CONTENT_TYPE, "application/json");
-        response.send(score(body, body.length));
     }
 }

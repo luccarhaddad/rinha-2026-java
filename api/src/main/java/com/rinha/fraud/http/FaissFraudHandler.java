@@ -5,18 +5,14 @@ import com.rinha.fraud.data.Norm;
 import com.rinha.fraud.faiss.FaissIndex;
 import com.rinha.fraud.model.FraudRequest;
 import com.rinha.fraud.vec.Vectorizer;
-import io.helidon.webserver.http.Handler;
-import io.helidon.webserver.http.ServerRequest;
-import io.helidon.webserver.http.ServerResponse;
 
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
- * Production handler: scores via FAISS IVF1024,SQ8 over the prebuilt index.
- * Parallel to {@link FraudHandler} (brute-force, kept for tests/fallback).
- * App.java picks one based on KERNEL env.
+ * Production scorer: FAISS IVF1024,SQ8 over the prebuilt index.
+ * Pure POJO: HTTP framework (Vert.x) calls {@link #score(byte[], int)} directly.
  */
-public final class FaissFraudHandler implements Handler {
+public final class FaissFraudHandler {
     private final FaissIndex faiss;
     private final byte[] labels;
     private final MccRisk mcc;
@@ -59,12 +55,5 @@ public final class FaissFraudHandler implements Handler {
         } finally {
             release(s);
         }
-    }
-
-    @Override
-    public void handle(ServerRequest request, ServerResponse response) {
-        byte[] body = request.content().as(byte[].class);
-        response.header(io.helidon.http.HeaderNames.CONTENT_TYPE, "application/json");
-        response.send(score(body, body.length));
     }
 }

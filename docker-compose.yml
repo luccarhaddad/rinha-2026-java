@@ -1,11 +1,12 @@
-# Submission topology: nginx LB on :9999 round-robin across 2 API instances.
+# Submission topology: nginx LB on :9999, talks to 2 API instances via Unix Domain Sockets.
 # 2 × 0.45 CPU + 0.10 nginx = 1.0 CPU; 2 × 160 MB + 30 MB nginx = 350 MB (full budget).
-# At 140 MB the kernel evicted file-cache of data.faiss under load → cascade OOM.
+# UDS sockets live on a shared named volume `sockets` mounted at /sock in all 3 containers.
 services:
   nginx:
     image: nginx:1.27-alpine
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - sockets:/sock
     ports:
       - "9999:9999"
     depends_on:
@@ -19,9 +20,11 @@ services:
           memory: "30MB"
 
   api-1: &api
-    image: luccarhaddad/rinha2026-java:faiss-v3
+    image: luccarhaddad/rinha2026-java:faiss-v5
     environment:
-      PORT: "8080"
+      SOCK_PATH: /sock/api-1.sock
+    volumes:
+      - sockets:/sock
     networks: [app]
     deploy:
       resources:
@@ -31,7 +34,12 @@ services:
 
   api-2:
     <<: *api
+    environment:
+      SOCK_PATH: /sock/api-2.sock
 
 networks:
   app:
     driver: bridge
+
+volumes:
+  sockets:
