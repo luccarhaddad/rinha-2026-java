@@ -11,9 +11,13 @@
 set -euo pipefail
 
 # --- knobs ---
-PROFILE_DURATION=${1:-120}           # seconds to sample CPU
+PROFILE_DURATION=${1:-120}           # seconds to sample
 SAMPLE_INTERVAL_MS=${SAMPLE_INTERVAL_MS:-10}   # default: 10ms (low overhead)
 DELAY_BEFORE_PROFILE=${DELAY_BEFORE_PROFILE:-0}  # seconds to wait after k6 start before profiling
+# Profile event: cpu (needs perf_events; may fail in containers without CAP_SYS_ADMIN)
+#                wall (wall-clock sampling; always works; less precise for CPU-bound code)
+#                itimer (fallback signal-based; works without perf)
+PROFILE_EVENT=${PROFILE_EVENT:-wall}
 
 # --- paths ---
 HOME_DIR=${HOME}
@@ -98,10 +102,10 @@ if [ "$DELAY_BEFORE_PROFILE" -gt 0 ]; then
   sleep "$DELAY_BEFORE_PROFILE"
 fi
 
-log "starting async-profiler: ${PROFILE_DURATION}s @ ${SAMPLE_INTERVAL_MS}ms interval, CPU mode..."
+log "starting async-profiler: ${PROFILE_DURATION}s @ ${SAMPLE_INTERVAL_MS}ms interval, mode=$PROFILE_EVENT..."
 docker exec "$CID" /profiler/bin/asprof \
   -d "$PROFILE_DURATION" \
-  -e cpu \
+  -e "$PROFILE_EVENT" \
   -i "${SAMPLE_INTERVAL_MS}ms" \
   -f /tmp/cpu.html \
   1 \
