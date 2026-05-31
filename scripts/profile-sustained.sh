@@ -15,6 +15,8 @@ RATE=${1:-300}                       # constant req/s (well below saturation)
 DURATION=${2:-60}                    # seconds of load
 SAMPLE_INTERVAL_MS=${SAMPLE_INTERVAL_MS:-50}   # profiler sample interval (50ms = low overhead)
 PROFILE_EVENT=${PROFILE_EVENT:-wall}            # wall | itimer (both work in containers)
+CSTACK=${CSTACK:-no}                            # native stack mode: no | vm | fp (default "no" avoids
+                                                 # SIGSEGV when walking through libfaiss built -O3 no-fp)
 
 # --- paths ---
 WORK="$HOME/rinha-bench"
@@ -103,13 +105,19 @@ K6_PID=$!
 # small warmup window before profiling (avoid JIT-noisy first seconds)
 sleep 5
 
-log "launching profiler: ${DURATION}s @ ${SAMPLE_INTERVAL_MS}ms, mode=$PROFILE_EVENT..."
+log "launching profiler: ${DURATION}s @ ${SAMPLE_INTERVAL_MS}ms, mode=$PROFILE_EVENT, cstack=$CSTACK..."
 PROFILE_TIME=$(( DURATION - 5 ))
-# Record to JFR (intermediate format), then post-convert to multiple views
+# --cstack: how to walk native frames during sampling.
+#   no   = skip native frames entirely (safest with hand-tuned FAISS native code)
+#   vm   = use JVM-internal unwinder (safer than default fp)
+#   fp   = frame pointers (default; crashes if .so was built without -fno-omit-frame-pointer)
+# We default to "no" because libfaiss was built -O3 Release without frame pointers.
+# We still see how much time is in native (just not the FAISS internal breakdown).
 docker exec "$CID" /profiler/bin/asprof \
   -d "$PROFILE_TIME" \
   -e "$PROFILE_EVENT" \
   -i "${SAMPLE_INTERVAL_MS}ms" \
+  --cstack "$CSTACK" \
   -f /tmp/cpu.jfr \
   1 \
   > "$PROF_LOG" 2>&1 &
