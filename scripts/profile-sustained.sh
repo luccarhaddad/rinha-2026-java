@@ -105,11 +105,12 @@ sleep 5
 
 log "launching profiler: ${DURATION}s @ ${SAMPLE_INTERVAL_MS}ms, mode=$PROFILE_EVENT..."
 PROFILE_TIME=$(( DURATION - 5 ))
+# Record to JFR (intermediate format), then post-convert to multiple views
 docker exec "$CID" /profiler/bin/asprof \
   -d "$PROFILE_TIME" \
   -e "$PROFILE_EVENT" \
   -i "${SAMPLE_INTERVAL_MS}ms" \
-  -f /tmp/cpu.html \
+  -f /tmp/cpu.jfr \
   1 \
   > "$PROF_LOG" 2>&1 &
 PROF_PID=$!
@@ -120,8 +121,46 @@ log "profiler done"
 wait $K6_PID || true
 log "k6 done"
 
-# --- 6) collect artifacts ---
+# --- 6) post-process: convert JFR to flame graph (HTML) + collapsed stacks (text) ---
+log "converting profile output..."
+docker exec "$CID" /profiler/bin/asprof convert -o flamegraph /tmp/cpu.jfr -f /tmp/cpu.html 2>>"$PROF_LOG" || log "(flamegraph convert failed)"
+docker exec "$CID" /profiler/bin/asprof convert -o collapsed /tmp/cpu.jfr -f /tmp/cpu.collapsed 2>>"$PROF_LOG" || log "(collapsed convert failed)"
+
 docker cp "$CID:/tmp/cpu.html" "$FLAME" 2>/dev/null || log "no /tmp/cpu.html"
+docker cp "$CID:/tmp/cpu.collapsed" "$OUT_DIR/cpu.collapsed" 2>/dev/null || log "no /tmp/cpu.collapsed"
+
+# --- 6b) textual top hotspots from collapsed stacks ---
+if [ -f "$OUT_DIR/cpu.collapsed" ]; then
+  log ""
+  log "============== TOP 25 STACKS (by samples) =============="
+  sort -t' ' -k2 -nr "$OUT_DIR/cpu.collapsed" | head -25 | \
+    awk '{ count=$NF; $NF=""; printf "%6d  %s\n", count, $0 }' | \
+    sed 's|;|\n  → |g' | head -100
+  log ""
+  log "============== TOP 25 LEAF METHODS (by samples — where the time actually goes) =============="
+  awk '{
+    n=$NF
+    sub(/ *[0-9]+$/, "")
+    # last frame in stack (after final ;)
+    sub(/.*;/, "")
+    counts[$0] += n
+  } END {
+    for (k in counts) print counts[k], k
+  }' "$OUT_DIR/cpu.collapsed" | sort -nr | head -25
+  log ""
+  log "============== TOP 15 PACKAGES (by samples — aggregate by group) =============="
+  awk '{
+    n=$NF
+    sub(/ *[0-9]+$/, "")
+    sub(/.*;/, "")
+    # extract package prefix (first 3 dot-segments)
+    split($0, parts, ".")
+    pkg=parts[1]"."parts[2]"."parts[3]
+    counts[pkg] += n
+  } END {
+    for (k in counts) print counts[k], k
+  }' "$OUT_DIR/cpu.collapsed" | sort -nr | head -15
+fi
 
 # --- 7) verify containers survived ---
 log ""
