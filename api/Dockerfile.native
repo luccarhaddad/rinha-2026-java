@@ -27,7 +27,9 @@ COPY --from=jar-build /src/api/target/api.jar /build/api.jar
 #   -H:+ForeignAPISupport               : FFM (java.lang.foreign) in NI.
 #   -O3                                 : max compile optimization.
 #   -march=x86-64-v3                    : Haswell baseline (AVX2) — matches the VM.
-#   --gc=G1                             : low-latency GC; serial is too pause-prone under load.
+#   --gc=serial                         : G1 is Enterprise-only in Graal 25 CE. Serial fits
+#                                          our tiny heap (64m) with sub-5ms pauses; epsilon
+#                                          (no-op GC) doesn't suit long-running workloads.
 #   -R:MaxHeapSize=64m                  : NI has no metaspace/code-cache; 64m fits easily
 #                                          in the 160 MiB container budget alongside the
 #                                          mmap'd faiss index.
@@ -44,14 +46,14 @@ RUN native-image \
     -H:+ForeignAPISupport \
     -H:Optimize=3 \
     -march=x86-64-v3 \
-    --gc=G1 \
+    --gc=serial \
     -R:MaxHeapSize=64m \
     -J--add-modules=jdk.incubator.vector \
     -J--enable-native-access=ALL-UNNAMED \
     -H:Name=api \
     -H:Class=com.rinha.fraud.App \
     -cp /build/api.jar && \
-    ls -lh /build/api && file /build/api
+    ls -lh /build/api
 
 # ---- stage 3: runtime ----
 FROM ubuntu:24.04
