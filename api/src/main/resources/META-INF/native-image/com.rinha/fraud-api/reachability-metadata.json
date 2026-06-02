@@ -1,0 +1,12 @@
+{
+  "foreign": {
+    "downcalls": [
+      { "returnType": "int",   "parameterTypes": ["void*", "int", "void*"] },
+      { "returnType": "int",   "parameterTypes": ["void*", "long", "void*", "long", "void*", "void*"] },
+      { "returnType": "void*", "parameterTypes": ["void*"] },
+      { "returnType": "void",  "parameterTypes": ["void*", "long"] },
+      { "returnType": "void*", "parameterTypes": [] },
+      { "returnType": "void",  "parameterTypes": ["void*"] }
+    ]
+  }
+}
