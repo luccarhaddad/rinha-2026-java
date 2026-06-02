@@ -62,6 +62,14 @@ public final class App {
         FaissFraudHandler handler = new FaissFraudHandler(faiss, labels, mcc);
         warmupFaiss(handler);
 
+        // Training mode: exit cleanly so -XX:AOTCacheOutput can snapshot the cache.
+        // Used only by the aot-train stage of the Dockerfile.
+        if ("1".equals(System.getenv("TRAINING"))) {
+            System.out.println("TRAINING=1: warmup done, exiting for AOT cache snapshot.");
+            faiss.close();
+            return;
+        }
+
         listen(handler::score, "FAISS");
     }
 
@@ -93,7 +101,12 @@ public final class App {
                 .setEventLoopPoolSize(loops)
                 .setPreferNativeTransport(true)
                 .setWorkerPoolSize(1)             // unused (CPU work runs on event loop)
-                .setInternalBlockingPoolSize(1);
+                .setInternalBlockingPoolSize(1)
+                // Push the blocked-thread watchdog window very high so it never logs
+                // about our event-loop CPU work, but not Long.MAX_VALUE (overflows in
+                // Vert.x's Timer.schedule). 1h = effectively off for our usage.
+                .setBlockedThreadCheckInterval(3_600_000L)
+                .setWarningExceptionTime(3_600_000L * 1_000_000L); // ns
         Vertx vertx = Vertx.vertx(vopts);
 
         HttpServerOptions httpOpts = new HttpServerOptions()

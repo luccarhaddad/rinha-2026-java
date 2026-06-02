@@ -1,14 +1,6 @@
 # syntax=docker/dockerfile:1.7
-# Production image (linux/amd64) for the Rinha de Backend 2026 fraud API.
-#
-# Layout:
-#   /usr/local/lib/libfaiss*.so   — vendored, built once by docker/Dockerfile.faiss-builder
-#   /app/api.jar                  — compiled here (stage `build`)
-#   /app/resources/data.faiss     — prebuilt by scripts/preprocess_faiss.py
-#   /app/resources/labels.bin     — prebuilt by scripts/preprocess_faiss.py
-#
-# Build:  docker build --platform linux/amd64 -t luccarhaddad/rinha2026-java:latest -f api/Dockerfile .
-# Push:   docker push luccarhaddad/rinha2026-java:latest
+# Production image (linux/amd64).
+# Build: docker build --platform linux/amd64 -t luccarhaddad/rinha2026-java:faiss-v6 -f api/Dockerfile .
 
 # ---- stage 1: compile the jar ----
 FROM eclipse-temurin:25-jdk AS build
@@ -16,26 +8,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends maven && \
     rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY api/pom.xml /src/api/pom.xml
-# Pre-resolve deps for cacheable layer
 RUN cd api && mvn -B -q -DskipTests dependency:go-offline || true
 COPY api/src /src/api/src
 RUN cd api && mvn -B -q -DskipTests clean package
 
 # ---- stage 2: runtime ----
-FROM eclipse-temurin:25-jre AS runtime
+FROM eclipse-temurin:25-jre
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libopenblas0 libgomp1 libgfortran5 && \
     rm -rf /var/lib/apt/lists/* && \
     mkdir -p /app/resources /usr/local/lib
 
-# FAISS native libs (linux/amd64; built once via docker/Dockerfile.faiss-builder)
 COPY vendor/linux-amd64/libfaiss.so       /usr/local/lib/
 COPY vendor/linux-amd64/libfaiss_avx2.so  /usr/local/lib/
 COPY vendor/linux-amd64/libfaiss_c.so     /usr/local/lib/
 COPY vendor/linux-amd64/FAISS-LICENSE     /usr/local/lib/
 RUN ldconfig
 
-# App jar + prebuilt FAISS index + labels
 COPY --from=build /src/api/target/api.jar /app/api.jar
 COPY api/src/main/resources/data.faiss    /app/resources/data.faiss
 COPY api/src/main/resources/labels.bin    /app/resources/labels.bin
@@ -49,8 +38,10 @@ ENV LD_LIBRARY_PATH=/usr/local/lib \
     OMP_NUM_THREADS=1 \
     OPENBLAS_NUM_THREADS=1 \
     VERTX_EVENT_LOOPS=2
-# Note: SOCK_PATH is set by docker-compose per instance (api-1.sock, api-2.sock).
-# When SOCK_PATH is set, Vert.x listens on that Unix socket. Otherwise PORT (TCP).
+# SOCK_PATH is set per-instance by docker-compose (api-1.sock, api-2.sock).
+# Vert.x listens on UDS when SOCK_PATH is set, falls back to TCP $PORT otherwise.
+# (AOT cache was tried and dropped: +25 MiB resident for our tiny code surface
+#  with no measurable JIT/startup win — net cost on this 160 MiB budget.)
 ENTRYPOINT ["java", \
     "--add-modules=jdk.incubator.vector", \
     "--enable-native-access=ALL-UNNAMED", \
