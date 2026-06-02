@@ -1,0 +1,86 @@
+# syntax=docker/dockerfile:1.7
+# v9 — GraalVM Native Image. Targets linux/amd64 (Haswell+ / AVX2).
+# Build: docker build --platform linux/amd64 -t luccarhaddad/rinha2026-java:faiss-v9 -f api/Dockerfile.native .
+
+# ---- stage 1: shaded jar ----
+FROM eclipse-temurin:25-jdk AS jar-build
+RUN apt-get update && apt-get install -y --no-install-recommends maven && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY api/pom.xml /src/api/pom.xml
+RUN cd api && mvn -B -q -DskipTests dependency:go-offline || true
+COPY api/src /src/api/src
+RUN cd api && mvn -B -q -DskipTests clean package
+
+# ---- stage 2: native-image AOT compile ----
+# Community Edition GraalVM 25 (OL9 base = glibc 2.34, forward-compat with Ubuntu 24.04).
+FROM ghcr.io/graalvm/native-image-community:25-ol9 AS native-build
+WORKDIR /build
+COPY --from=jar-build /src/api/target/api.jar /build/api.jar
+
+# Build the static-ish binary. Notes per flag:
+#   --no-fallback                       : fail the build if NI can't statically resolve;
+#                                          no JVM-fallback binary slip-in.
+#   --enable-native-access=ALL-UNNAMED  : FFM downcalls (FaissIndex.java) need it.
+#   --add-modules=jdk.incubator.vector  : Vector API at build & run time.
+#   -H:+VectorAPISupport                : Graal 25 lowering of Vector API to SIMD.
+#   -H:+ForeignAPISupport               : FFM (java.lang.foreign) in NI.
+#   -O3                                 : max compile optimization.
+#   -march=x86-64-v3                    : Haswell baseline (AVX2) — matches the VM.
+#   --gc=G1                             : low-latency GC; serial is too pause-prone under load.
+#   -R:MaxHeapSize=64m                  : NI has no metaspace/code-cache; 64m fits easily
+#                                          in the 160 MiB container budget alongside the
+#                                          mmap'd faiss index.
+#   --initialize-at-build-time=...      : Vert.x/Netty/Jackson ship metadata in their jars
+#                                          (META-INF/native-image/...) so shade-merged jar
+#                                          auto-configures most classes; only override here
+#                                          if a runtime error reveals a missing case.
+RUN native-image \
+    --no-fallback \
+    --enable-native-access=ALL-UNNAMED \
+    --add-modules=jdk.incubator.vector \
+    -H:+UnlockExperimentalVMOptions \
+    -H:+VectorAPISupport \
+    -H:+ForeignAPISupport \
+    -H:Optimize=3 \
+    -march=x86-64-v3 \
+    --gc=G1 \
+    -R:MaxHeapSize=64m \
+    -J--add-modules=jdk.incubator.vector \
+    -J--enable-native-access=ALL-UNNAMED \
+    -H:Name=api \
+    -H:Class=com.rinha.fraud.App \
+    -cp /build/api.jar && \
+    ls -lh /build/api && file /build/api
+
+# ---- stage 3: runtime ----
+FROM ubuntu:24.04
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libopenblas0 libgomp1 libgfortran5 ca-certificates && \
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /app/resources /usr/local/lib
+
+COPY vendor/linux-amd64/libfaiss.so       /usr/local/lib/
+COPY vendor/linux-amd64/libfaiss_avx2.so  /usr/local/lib/
+COPY vendor/linux-amd64/libfaiss_c.so     /usr/local/lib/
+COPY vendor/linux-amd64/FAISS-LICENSE     /usr/local/lib/
+RUN ldconfig
+
+COPY --from=native-build /build/api       /app/api
+COPY api/src/main/resources/data.faiss    /app/resources/data.faiss
+COPY api/src/main/resources/labels.bin    /app/resources/labels.bin
+
+ENV LD_LIBRARY_PATH=/usr/local/lib \
+    FAISS_C_LIB_PATH=/usr/local/lib/libfaiss_c.so \
+    FAISS_INDEX=/app/resources/data.faiss \
+    LABELS_BIN=/app/resources/labels.bin \
+    KERNEL=faiss \
+    FAISS_NPROBE=8 \
+    OMP_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
+    VERTX_EVENT_LOOPS=2
+
+# Native binary — runtime tuning passes through to SubstrateVM (-R: flags) and
+# native runtime (-XX: subset). No JVM JIT, so no -XX:ReservedCodeCacheSize etc.
+ENTRYPOINT ["/app/api", \
+    "-XX:ActiveProcessorCount=1"]
