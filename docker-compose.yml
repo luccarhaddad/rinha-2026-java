@@ -20,7 +20,7 @@ services:
           memory: "30MB"
 
   api-1: &api
-    image: luccarhaddad/rinha2026-java:faiss-v6
+    image: luccarhaddad/rinha2026-java:latest
     environment:
       SOCK_PATH: /sock/api-1.sock
     volumes:
