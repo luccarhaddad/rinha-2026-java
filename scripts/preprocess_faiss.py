@@ -3,14 +3,19 @@
 
 Reads references.json.gz and writes two artifacts that get baked into the
 Docker image:
-  - data.faiss  : FAISS IVF4096_HNSW32,SQ8 index (METRIC_L2), ~66 MB
+  - data.faiss  : FAISS IVF4096,SQ8 index (METRIC_L2), ~66 MB
   - labels.bin  : N bytes (0 = legit, 1 = fraud), ordinals matching FAISS ids
 
-Why IVF_HNSW: HNSW is used as the coarse quantizer over the 4096 IVF
-centroids (NOT the 3M dataset). This makes the "which cells to probe"
-lookup O(log 4096) instead of O(4096) linear scan. With finer cells
-(4096 vs 1024) we can use lower nprobe (~4 vs 8) for same recall —
-the dominant scan cost drops ~7x.
+Why IVF4096 (and not IVF1024 or IVF4096_HNSW32):
+  - 4096 cells = ~733 vec/cell (vs IVF1024's 2930). Same recall reachable
+    at nprobe ~6 that needed nprobe=8 with 1024 cells → ~4x fewer vectors
+    scanned per query.
+  - Plain (no HNSW) coarse quantizer: exact nearest-centroid assignment
+    at training time. IVF4096_HNSW32 (tried as v10) had a recall floor
+    of ~98.3% because HNSW's approximate search misassigned ~2% of
+    vectors during index.add() — those became unfindable at any nprobe.
+  - Coarse step cost is 4096 × 14 × 4B = ~230k FLOPs per query (~50μs);
+    negligible vs the scan, which is the dominant cost.
 
 Run:
   pip install faiss-cpu numpy
@@ -29,10 +34,8 @@ import time
 
 
 DIMS = 14
-NLIST = 4096  # IVF cells; ~3M/4096 ≈ 733 vec/cell. 4x finer than v9's 1024 cells.
-HNSW_M = 32   # HNSW coarse quantizer connectivity (operates over the NLIST
-              # centroids only — NOT the 3M dataset vectors).
-FACTORY = f"IVF{NLIST}_HNSW{HNSW_M},SQ8"
+NLIST = 4096  # IVF cells; ~3M/4096 ≈ 733 vec/cell. 4x finer than v9's 1024.
+FACTORY = f"IVF{NLIST},SQ8"
 
 
 def load(gz_path: str):
